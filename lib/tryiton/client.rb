@@ -52,20 +52,22 @@ module Tryiton
 
     # Put a garment or accessory on a person. Returns the job id.
     # Keys: model_image (required), garment_image (required), category,
-    # subcategory, mode, num_samples, output_format, seed, segmentation_free,
-    # garment_photo_type, moderation_level.
+    # subcategory, mode, num_samples (1-4), output_format ("png"/"jpeg"),
+    # moderation_level ("conservative"/"permissive"/"none").
     def try_on_clothes(**params)
       request(:post, "/tryon/clothes", params)["jobId"]
     end
 
     # Restyle a person's hair. Returns the job id.
-    # Keys: face_image (required), haircut (required), hair_color.
+    # Keys: face_image (required), haircut (required), hair_color,
+    # num_samples (1-4), output_format ("png"/"jpeg").
     def try_on_hairstyle(**params)
       request(:post, "/tryon/hairstyle", params)["jobId"]
     end
 
     # Ink a design onto skin. Returns the job id.
-    # Keys: body_image (required), design_image (required), placement.
+    # Keys: body_image (required), design_image (required), placement,
+    # num_samples (1-4), output_format ("png"/"jpeg").
     def try_on_tattoo(**params)
       request(:post, "/tryon/tattoo", params)["jobId"]
     end
