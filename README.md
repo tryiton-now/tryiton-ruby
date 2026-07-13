@@ -65,8 +65,10 @@ Additional options (`mode` and `moderation_level` for clothing; `num_samples` 1â
 # Hairstyle try-on (see Tryiton::HAIRCUTS for all supported values)
 client.try_on_hairstyle(face_image: face_url, haircut: "BuzzCut", hair_color: "ash blonde")
 
-# Tattoo try-on
+# Tattoo try-on â€” place it with free text...
 client.try_on_tattoo(body_image: body_url, design_image: design_url, placement: "on the right forearm, small")
+# ...or pin the exact spot with a region box (normalized 0-1, from the image's top-left)
+client.try_on_tattoo(body_image: body_url, design_image: design_url, region: { x: 0.32, y: 0.18, w: 0.28, h: 0.34 })
 
 # Poll a job manually, or check your credit balance
 status  = client.get_status(job_id)  # { "status" => ..., "output" => [...], "error" => ... }
