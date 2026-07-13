@@ -31,7 +31,7 @@ module Tryiton
   # Client for the TryItOn virtual try-on API.
   #
   #   client = Tryiton::Client.new(api_key: ENV["TRYITON_API_KEY"])
-  #   job_id = client.try_on_clothes(
+  #   job_id = client.try_on_fashion(
   #     model_image: "https://example.com/model.jpg",
   #     garment_image: "https://example.com/tshirt.jpg",
   #     category: "clothing", subcategory: "tops"
@@ -54,8 +54,8 @@ module Tryiton
     # Keys: model_image (required), garment_image (required), category,
     # subcategory, mode, num_samples (1-4), output_format ("png"/"jpeg"),
     # moderation_level ("conservative"/"permissive"/"none").
-    def try_on_clothes(**params)
-      request(:post, "/tryon/clothes", params)["jobId"]
+    def try_on_fashion(**params)
+      request(:post, "/tryon/fashion", params)["jobId"]
     end
 
     # Restyle a person's hair. Returns the job id.
