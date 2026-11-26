@@ -1,4 +1,14 @@
+# Build output
 pkg/
 *.gem
+
+# Bundler: libraries don't commit their lockfile
 Gemfile.lock
 .bundle/
+vendor/bundle/
+
+# Docs, coverage, scratch
+/doc/
+/.yardoc/
+/coverage/
+/tmp/

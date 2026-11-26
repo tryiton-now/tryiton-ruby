@@ -12,7 +12,7 @@ Gem::Specification.new do |spec|
   spec.license       = "MIT"
   spec.required_ruby_version = ">= 2.6"
 
-  spec.files         = Dir["lib/**/*.rb", "README.md"]
+  spec.files         = Dir.chdir(__dir__) { Dir["lib/**/*.rb", "sig/**/*.rbs", "README.md", "CHANGELOG.md", "LICENSE"] }
   spec.require_paths = ["lib"]
 
   spec.metadata = {
@@ -20,5 +20,6 @@ Gem::Specification.new do |spec|
     "documentation_uri" => "https://docs.tryiton.now",
     "source_code_uri" => "https://github.com/tryiton-now/tryiton-ruby",
     "bug_tracker_uri" => "https://github.com/tryiton-now/tryiton-ruby/issues",
+    "changelog_uri" => "https://github.com/tryiton-now/tryiton-ruby/blob/main/CHANGELOG.md",
   }
 end

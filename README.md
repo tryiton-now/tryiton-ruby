@@ -75,6 +75,30 @@ status  = client.get_status(job_id)  # { "status" => ..., "output" => [...], "er
 credits = client.get_credits          # { "on_demand" => ..., "subscription" => ..., "purchased" => ..., "reserved" => ... }
 ```
 
+## Live try-on (real-time webcam)
+
+Your server prepares garments and starts sessions with the API key. The shopper's browser streams with the
+[`tryiton-live`](https://www.npmjs.com/package/tryiton-live) npm package, using only the session-scoped response.
+
+```ruby
+# Once per product, e.g. at catalog sync (cached per image + category):
+garment = client.prepare_live_garment(garment_image: product_image_url, category: "clothing", subcategory: "tops")
+
+# When a shopper opens live try-on. Render `start` to the browser as-is (e.g. `render json: start`):
+start = client.start_live_session(
+  garment_id: garment["id"],
+  end_user_id: shopper.id.to_s,                # one stream per end user
+  allowed_origin: "https://shop.example.com"   # locks the media token to your site
+)
+
+client.get_live_session(start["session"]["id"])   # { "status" => ..., "seconds" => ..., "creditsCharged" => ... }
+client.stop_live_session(start["session"]["id"])  # end it from your server
+client.get_live_config                            # { "enabled" => ..., "secondsPerCredit" => ..., "maxSeconds" => ... }
+```
+
+Billing is per `secondsPerCredit` seconds of streamed video, from the first try-on frame. Garment switches during a
+session are free.
+
 ## Error handling
 
 All failures raise `Tryiton::Error`, which carries the HTTP status code and the API error name.
@@ -91,6 +115,21 @@ end
 
 - Output image URLs expire 72 hours after completion. Download any results you want to keep.
 - Failed jobs are never charged.
+- Every request sends `User-Agent: tryiton-ruby/<version>`.
+- Type signatures (RBS) ship in `sig/` for Steep and other RBS tooling.
+- To route requests through your own HTTP layer (retries, logging, a proxy), pass `transport:` to `Client.new`: any
+  object whose `call(request)` takes a `Tryiton::Request` and returns something with `status` and `body`. See
+  `Tryiton::NetHTTPTransport` for the default.
+
+## Development
+
+```bash
+bundle install
+bundle exec rake test               # Minitest, including the shared contract cases
+bundle exec rbs -I sig validate     # RBS signatures (Ruby 3.1+)
+```
+
+`test/fixtures/sdk-cases.json` is generated from the TryItOn backend's API contract. Don't edit it here.
 
 ## Documentation
 
