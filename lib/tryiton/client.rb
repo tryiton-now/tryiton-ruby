@@ -58,8 +58,10 @@ module Tryiton
 
     # Put a garment or accessory on a person. Returns the job id.
     # Keys: model_image (required), garment_image (required), category,
-    # subcategory, mode, num_samples (1-4), output_format ("png"/"jpeg"),
-    # moderation_level ("conservative"/"permissive"/"none").
+    # subcategory, num_samples (1-4), output_format ("png"/"jpeg").
+    #
+    # Deprecated keys: +mode+ is ignored by the API, and +moderation_level+ is
+    # validated but has no effect. Both will be removed in 3.0.
     def try_on_fashion(**params)
       request(:post, "/tryon/fashion", params)["jobId"]
     end
