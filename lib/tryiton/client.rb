@@ -1,8 +1,9 @@
 # frozen_string_literal: true
 
 require "json"
-require "net/http"
 require "uri"
+require_relative "version"
+require_relative "transport"
 
 module Tryiton
   # Raised for API-level errors and runtime (job) failures.
@@ -41,13 +42,18 @@ module Tryiton
   # See https://docs.tryiton.now
   class Client
     DEFAULT_BASE_URL = "https://tryiton.now/api/v1"
+    USER_AGENT = "tryiton-ruby/#{VERSION}"
 
-    def initialize(api_key:, base_url: DEFAULT_BASE_URL, timeout: 60)
+    # +timeout+ (seconds) applies to connecting and to each read.
+    # +transport+ replaces the HTTP layer: any object whose +call(request)+
+    # takes a Tryiton::Request and returns something with +status+ and +body+
+    # (see Tryiton::NetHTTPTransport). +timeout+ is ignored when it's given.
+    def initialize(api_key:, base_url: DEFAULT_BASE_URL, timeout: 60, transport: nil)
       raise Error.new("An api_key is required.", error_name: "ConfigError") if api_key.nil? || api_key.empty?
 
       @api_key = api_key
       @base_url = base_url.sub(%r{/+\z}, "")
-      @timeout = timeout
+      @transport = transport || NetHTTPTransport.new(timeout: timeout)
     end
 
     # Put a garment or accessory on a person. Returns the job id.
@@ -69,11 +75,8 @@ module Tryiton
     # Keys: body_image (required), design_image (required), placement, region,
     # num_samples (1-4), output_format ("png"/"jpeg").
     #
-    # Position the ink two ways, and they compose: +placement+ is free text
-    # ("on the right forearm, small"); +region+ pins the exact spot as
-    # { x:, y:, w:, h: }, normalized 0-1 from the body image's top-left corner,
-    # each side at least 0.06. With a region, +placement+ only describes
-    # size/style.
+    # +region+ is { x:, y:, w:, h: } normalized 0-1 from the top-left, each side
+    # >= 0.06; with it, +placement+ only describes size/style.
     def try_on_tattoo(**params)
       request(:post, "/tryon/tattoo", params)["jobId"]
     end
@@ -81,13 +84,61 @@ module Tryiton
     # Fetch the current status of a job.
     # Returns { "status" => ..., "output" => [...], "error" => ... }.
     def get_status(job_id)
-      data = request(:get, "/status/#{URI.encode_www_form_component(job_id)}")
+      data = request(:get, "/status/#{escape_segment(job_id)}")
       { "status" => data["status"] || "processing", "output" => data["output"] || [], "error" => data["error"] }
     end
 
     # Fetch your current credit balance.
     def get_credits
       request(:get, "/credits")["credits"]
+    end
+
+    # -- Live (real-time webcam) try-on ---------------------------------------
+    # Server side only. The end user's browser streams with the `tryiton-live`
+    # npm package, using the response of start_live_session (session-scoped
+    # credentials; never your API key).
+
+    # Live try-on availability and pricing for your account.
+    # Returns { "enabled", "secondsPerCredit", "maxSeconds", "minCredits",
+    # "maxConcurrentSessions" }.
+    def get_live_config
+      request(:get, "/live/config").reject { |k, _| k == "ok" }
+    end
+
+    # Prepare a garment for live try-on. Do it once per product, ahead of time
+    # (e.g. at catalog sync): it's cached per image and category, so starting a
+    # session or switching garments later is instant. Passing +category+ is
+    # recommended; omit it to let it be detected.
+    # Returns { "id", "category", "subcategory", "description", "createdAt" }.
+    def prepare_live_garment(garment_image:, category: nil, subcategory: nil)
+      body = { garment_image: garment_image, category: category, subcategory: subcategory }
+      request(:post, "/live/garments", body)["garment"]
+    end
+
+    # Start a live session for one end user. Holds the first credit.
+    #   garment_id     - a prepared garment to start with.
+    #   max_seconds    - cap this session, 10..maxSeconds.
+    #   end_user_id    - your id for the end user: one stream per end user, a
+    #                    restart ends their previous one.
+    #   allowed_origin - lock the media token to your site, e.g. "https://shop.example.com".
+    # Returns the whole response body ("session", "clientSecret", "connection",
+    # "secondsPerCredit", "maxSeconds", "secondsLeft", "garment"). Send it to the
+    # browser as-is; it streams with connectLiveTryOn from `tryiton-live`.
+    def start_live_session(garment_id: nil, max_seconds: nil, end_user_id: nil, allowed_origin: nil)
+      body = { garment_id: garment_id, max_seconds: max_seconds, end_user_id: end_user_id, allowed_origin: allowed_origin }
+      request(:post, "/live/sessions", body)
+    end
+
+    # Status and usage of a live session.
+    # Returns { "id", "status", "endReason", "seconds", "creditsCharged", ... }.
+    def get_live_session(session_id)
+      request(:get, "/live/sessions/#{escape_segment(session_id)}")["session"]
+    end
+
+    # End a live session from your server (e.g. the user left). Idempotent.
+    # Returns the ended session.
+    def stop_live_session(session_id)
+      request(:post, "/live/sessions/#{escape_segment(session_id)}/stop", {})["session"]
     end
 
     # Poll a job until it completes, then return the output image URLs.
@@ -98,10 +149,7 @@ module Tryiton
         status = get_status(job_id)
         return status["output"] if status["status"] == "completed"
 
-        if status["status"] == "failed"
-          err = status["error"] || {}
-          raise Error.new(err["message"] || "Try-on failed.", error_name: err["name"] || "ProcessingError")
-        end
+        raise job_error(status["error"]) if status["status"] == "failed"
 
         raise Error.new("Timed out waiting for job #{job_id}.", error_name: "Timeout") if monotonic > deadline
 
@@ -115,42 +163,63 @@ module Tryiton
       Process.clock_gettime(Process::CLOCK_MONOTONIC)
     end
 
-    def request(method, path, body = nil)
-      uri = URI.parse("#{@base_url}#{path}")
-      req =
-        case method
-        when :post then Net::HTTP::Post.new(uri)
-        else Net::HTTP::Get.new(uri)
-        end
-      req["Authorization"] = "Bearer #{@api_key}"
+    # A path segment, percent-encoded (spaces as %20; "+" would reach the
+    # server as a literal plus).
+    def escape_segment(value)
+      URI.encode_www_form_component(value.to_s).gsub("+", "%20")
+    end
 
+    def request(method, path, body = nil)
+      headers = { "Authorization" => "Bearer #{@api_key}", "User-Agent" => USER_AGENT }
+      json = nil
       unless body.nil?
-        compact = body.reject { |_, v| v.nil? }
-        req["Content-Type"] = "application/json"
-        req.body = JSON.generate(compact)
+        headers["Content-Type"] = "application/json"
+        json = JSON.generate(body.reject { |_, v| v.nil? })
       end
+      http_method = method == :post ? "POST" : "GET"
+      req = Request.new(http_method: http_method, url: "#{@base_url}#{path}", headers: headers, body: json)
 
       begin
-        res = Net::HTTP.start(uri.hostname, uri.port, use_ssl: uri.scheme == "https", read_timeout: @timeout) do |http|
-          http.request(req)
-        end
+        res = @transport.call(req)
+      rescue Error
+        raise
       rescue StandardError => e
         raise Error.new("Network error: #{e.message}", error_name: "NetworkError")
       end
 
+      raw = res.body.to_s
       data =
         begin
-          res.body && !res.body.empty? ? JSON.parse(res.body) : {}
+          raw.empty? ? {} : JSON.parse(raw)
         rescue JSON::ParserError
           {}
         end
 
-      code = res.code.to_i
-      unless (200..299).cover?(code)
-        raise Error.new(data["message"] || "HTTP #{code}", status: code, error_name: data["error"])
-      end
+      data = {} unless data.is_a?(Hash)
+
+      code = res.status.to_i
+      raise api_error(data, code) unless (200..299).cover?(code)
 
       data
+    end
+
+    # GET /status returns a failed job's reason as a plain string; accept the
+    # { "name", "message" } envelope shape too.
+    def job_error(err)
+      if err.is_a?(Hash)
+        Error.new(err["message"] || "Try-on failed.", error_name: err["name"] || "ProcessingError")
+      else
+        message = err.is_a?(String) && !err.empty? ? err : "Try-on failed."
+        Error.new(message, error_name: "ProcessingError")
+      end
+    end
+
+    # API envelope: { "ok" => false, "error" => { "name", "message" } }. Older shapes put strings at the top level.
+    def api_error(data, code)
+      err = data["error"].is_a?(Hash) ? data["error"] : {}
+      top_name = data["error"].is_a?(String) ? data["error"] : nil
+      message = err["message"] || (data["message"].is_a?(String) ? data["message"] : nil) || "HTTP #{code}"
+      Error.new(message, status: code, error_name: err["name"] || top_name)
     end
   end
 end

@@ -1,0 +1,189 @@
+# Signatures for the public API of the tryiton gem.
+#
+# Responses are plain Hashes with String keys, exactly as parsed from the API's
+# JSON; the record aliases below describe their shape. Numbers the API may send
+# with a fraction are Numeric.
+module Tryiton
+  VERSION: String
+
+  # Supported `haircut` values for hairstyle try-on.
+  HAIRCUTS: Array[String]
+
+  # GET /status/{id}. `error` is the failure reason of a failed job.
+  type status = {
+    "status" => String,
+    "output" => Array[String],
+    "error" => String?
+  }
+
+  # GET /credits
+  type credits = {
+    "on_demand" => Integer,
+    "subscription" => Integer,
+    "purchased" => Integer,
+    "reserved" => Integer
+  }
+
+  # GET /live/config (without "ok")
+  type live_config = {
+    "enabled" => bool,
+    "secondsPerCredit" => Numeric,
+    "maxSeconds" => Numeric,
+    "minCredits" => Integer,
+    "maxConcurrentSessions" => Integer
+  }
+
+  # POST /live/garments. In a start_live_session response it also carries "input".
+  type live_garment = {
+    "id" => String,
+    "category" => String,
+    "subcategory" => String?,
+    "description" => String?,
+    "createdAt" => String,
+    ?"input" => live_garment_input
+  }
+
+  type live_garment_input = {
+    "prompt" => String,
+    "enhancePrompt" => bool,
+    "referenceImage" => String
+  }
+
+  # GET /live/sessions/{id}, POST /live/sessions/{id}/stop
+  type live_session = {
+    "id" => String,
+    "status" => String,
+    "endReason" => String?,
+    "seconds" => Numeric,
+    "creditsCharged" => Integer,
+    "endUserId" => String?,
+    "createdAt" => String,
+    "endedAt" => String?
+  }
+
+  type live_connection = {
+    "provider" => String,
+    "model" => String,
+    "token" => String
+  }
+
+  # POST /live/sessions: the whole response body, meant for the browser as-is.
+  type live_session_start = {
+    "ok" => bool,
+    "session" => live_session,
+    "clientSecret" => String,
+    "connection" => live_connection,
+    "secondsPerCredit" => Numeric,
+    "maxSeconds" => Numeric,
+    "secondsLeft" => Numeric,
+    "garment" => live_garment?
+  }
+
+  # Tattoo placement box, normalized 0-1 from the body image's top-left.
+  type region = { x: Numeric, y: Numeric, w: Numeric, h: Numeric } | Hash[String, Numeric]
+
+  class Error < StandardError
+    # HTTP status code, or nil for a job failure, timeout or network error.
+    attr_reader status: Integer?
+
+    # API error name, e.g. "OutOfCredits", "ProcessingError", "Timeout", "NetworkError".
+    attr_reader error_name: String?
+
+    def initialize: (String message, ?status: Integer?, ?error_name: String?) -> void
+  end
+
+  # What a transport receives.
+  class Request < Struct[untyped]
+    attr_accessor http_method: String
+    attr_accessor url: String
+    attr_accessor headers: Hash[String, String]
+    attr_accessor body: String?
+
+    def initialize: (?http_method: String, ?url: String, ?headers: Hash[String, String], ?body: String?) -> void
+  end
+
+  # What the default transport returns.
+  class Response < Struct[untyped]
+    attr_accessor status: Integer
+    attr_accessor body: String?
+
+    def initialize: (?status: Integer, ?body: String?) -> void
+  end
+
+  # Anything that can stand in for the HTTP layer (Client.new(transport: ...)).
+  interface _Transport
+    def call: (Request request) -> _Response
+  end
+
+  interface _Response
+    def status: () -> Integer
+    def body: () -> String?
+  end
+
+  # The default transport (satisfies _Transport).
+  class NetHTTPTransport
+    def initialize: (?timeout: Numeric) -> void
+    def call: (Request request) -> Response
+  end
+
+  class Client
+    DEFAULT_BASE_URL: String
+    USER_AGENT: String
+
+    def initialize: (api_key: String, ?base_url: String, ?timeout: Numeric, ?transport: _Transport?) -> void
+
+    # Returns the job id. Extra keywords are sent to the API as-is.
+    def try_on_fashion: (
+      model_image: String,
+      garment_image: String,
+      ?category: String?,
+      ?subcategory: String?,
+      ?mode: String?,
+      ?num_samples: Integer?,
+      ?output_format: String?,
+      ?moderation_level: String?,
+      **untyped
+    ) -> String
+
+    def try_on_hairstyle: (
+      face_image: String,
+      haircut: String,
+      ?hair_color: String?,
+      ?num_samples: Integer?,
+      ?output_format: String?,
+      **untyped
+    ) -> String
+
+    def try_on_tattoo: (
+      body_image: String,
+      design_image: String,
+      ?placement: String?,
+      ?region: region?,
+      ?num_samples: Integer?,
+      ?output_format: String?,
+      **untyped
+    ) -> String
+
+    def get_status: (String job_id) -> status
+
+    def get_credits: () -> credits
+
+    def get_live_config: () -> live_config
+
+    def prepare_live_garment: (garment_image: String, ?category: String?, ?subcategory: String?) -> live_garment
+
+    def start_live_session: (
+      ?garment_id: String?,
+      ?max_seconds: Integer?,
+      ?end_user_id: String?,
+      ?allowed_origin: String?
+    ) -> live_session_start
+
+    def get_live_session: (String session_id) -> live_session
+
+    def stop_live_session: (String session_id) -> live_session
+
+    # Returns the output image URLs. Raises Error on failure or timeout.
+    def wait_for_result: (String job_id, ?poll_interval: Numeric, ?timeout: Numeric) -> Array[String]
+  end
+end
