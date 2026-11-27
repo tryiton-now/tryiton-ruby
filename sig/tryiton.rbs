@@ -33,12 +33,16 @@ module Tryiton
     "maxConcurrentSessions" => Integer
   }
 
-  # POST /live/garments. In a start_live_session response it also carries "input".
+  # POST /live/garments and /live/outfits ("category" is "outfit" for an outfit,
+  # "items" its garment ids). In a start_live_session response it also carries "input".
   type live_garment = {
     "id" => String,
     "category" => String,
     "subcategory" => String?,
     "description" => String?,
+    "prompt" => String,
+    "enhancePrompt" => bool,
+    "items" => Array[String]?,
     "createdAt" => String,
     ?"input" => live_garment_input
   }
@@ -170,7 +174,17 @@ module Tryiton
 
     def get_live_config: () -> live_config
 
-    def prepare_live_garment: (garment_image: String, ?category: String?, ?subcategory: String?) -> live_garment
+    def prepare_live_garment: (
+      garment_image: String,
+      ?category: String?,
+      ?subcategory: String?,
+      ?detail_images: Array[String]?,
+      ?description: String?,
+      ?instructions: String?,
+      ?enhance_prompt: bool?
+    ) -> live_garment
+
+    def prepare_live_outfit: (garment_ids: Array[String], ?instructions: String?, ?enhance_prompt: bool?) -> live_garment
 
     def start_live_session: (
       ?garment_id: String?,

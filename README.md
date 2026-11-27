@@ -99,6 +99,41 @@ client.get_live_config                            # { "enabled" => ..., "seconds
 Billing is per `secondsPerCredit` seconds of streamed video, from the first try-on frame. Garment switches during a
 session are free.
 
+`prepare_live_garment` also takes optional overrides:
+
+```ruby
+client.prepare_live_garment(
+  garment_image: product_image_url,
+  category: "footwear",
+  detail_images: [side_view_url, back_view_url],           # up to 3 extra views; they only sharpen the description
+  description: "black leather knee-high boots",            # your description (max 200), used in the generated prompt
+  instructions: "Replace only the shoes with the boots.",  # or your own prompt (max 1000), used verbatim
+  enhance_prompt: false                                    # keep the prompt as-is (default true)
+)
+```
+
+### Outfits
+
+Combine 2–3 prepared garments into one outfit worn together. The outfit's `"id"` works wherever a garment id does
+(`start_live_session`, the browser's `switchGarment`). To swap one item, prepare the new combination (cached) and switch to it.
+
+```ruby
+top      = client.prepare_live_garment(garment_image: shirt_url, category: "clothing", subcategory: "tops")
+trousers = client.prepare_live_garment(garment_image: trousers_url, category: "clothing", subcategory: "bottoms")
+shoes    = client.prepare_live_garment(garment_image: shoes_url, category: "footwear")
+
+outfit = client.prepare_live_outfit(garment_ids: [top["id"], trousers["id"], shoes["id"]])
+# outfit["category"] == "outfit", outfit["items"] = the garment ids top to bottom
+start = client.start_live_session(garment_id: outfit["id"], end_user_id: shopper.id.to_s)
+
+# Later the shopper picks another top: prepare that outfit and switch the running stream to it.
+jacket = client.prepare_live_garment(garment_image: jacket_url, category: "clothing", subcategory: "tops")
+next_outfit = client.prepare_live_outfit(garment_ids: [jacket["id"], trousers["id"], shoes["id"]])
+# Send next_outfit["id"] to the browser, which switches with tryiton-live: await live.switchGarment(id);
+```
+
+`prepare_live_outfit` also takes `instructions:` and `enhance_prompt:`, as above.
+
 ## Error handling
 
 All failures raise `Tryiton::Error`, which carries the HTTP status code and the API error name.

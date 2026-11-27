@@ -29,6 +29,11 @@ class ContractTest < Minitest::Test
     "maxSeconds" => :max_seconds,
     "endUserId" => :end_user_id,
     "allowedOrigin" => :allowed_origin,
+    "detailImages" => :detail_images,
+    "description" => :description,
+    "instructions" => :instructions,
+    "enhancePrompt" => :enhance_prompt,
+    "garmentIds" => :garment_ids,
   }.freeze
 
   # Canonical method => [Ruby method, positional params (in order), extra keywords].
@@ -42,6 +47,7 @@ class ContractTest < Minitest::Test
     "waitForResult" => [:wait_for_result, ["jobId"], { poll_interval: 0 }],
     "getLiveConfig" => [:get_live_config, [], {}],
     "prepareLiveGarment" => [:prepare_live_garment, [], {}],
+    "prepareLiveOutfit" => [:prepare_live_outfit, [], {}],
     "startLiveSession" => [:start_live_session, [], {}],
     "getLiveSession" => [:get_live_session, ["sessionId"], {}],
     "stopLiveSession" => [:stop_live_session, ["sessionId"], {}],

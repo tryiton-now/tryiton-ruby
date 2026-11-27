@@ -110,15 +110,37 @@ module Tryiton
     # Prepare a garment for live try-on. Do it once per product, ahead of time
     # (e.g. at catalog sync): it's cached per image and category, so starting a
     # session or switching garments later is instant. Passing +category+ is
-    # recommended; omit it to let it be detected.
-    # Returns { "id", "category", "subcategory", "description", "createdAt" }.
-    def prepare_live_garment(garment_image:, category: nil, subcategory: nil)
-      body = { garment_image: garment_image, category: category, subcategory: subcategory }
+    # recommended; omit it to let it be detected. Optional overrides:
+    #   detail_images  - up to 3 extra views (URLs or data URLs); they only
+    #                    sharpen the description.
+    #   description    - your item description (max 200), used in the generated prompt.
+    #   instructions   - your own prompt (max 1000), used verbatim instead.
+    #   enhance_prompt - false keeps the prompt as-is (default true).
+    # Returns { "id", "category", "subcategory", "description", "prompt",
+    # "enhancePrompt", "items", "createdAt" }.
+    def prepare_live_garment(garment_image:, category: nil, subcategory: nil, detail_images: nil, description: nil,
+                             instructions: nil, enhance_prompt: nil)
+      body = {
+        garment_image: garment_image, category: category, subcategory: subcategory, detail_images: detail_images,
+        description: description, instructions: instructions, enhance_prompt: enhance_prompt,
+      }
       request(:post, "/live/garments", body)["garment"]
     end
 
+    # Prepare an outfit: 2 or 3 prepared garment ids (e.g. a top, trousers and
+    # shoes) worn together. Cached per set of garments and overrides, in any
+    # order. +instructions+ replaces the generated outfit prompt (the items' own
+    # instructions don't carry over); +enhance_prompt+ false keeps it as-is.
+    # Returns the outfit in the garment shape, with "category" "outfit" and
+    # "items" (the garment ids, top to bottom). Its "id" works wherever a
+    # garment id does (start_live_session, the browser's switchGarment).
+    def prepare_live_outfit(garment_ids:, instructions: nil, enhance_prompt: nil)
+      body = { garment_ids: garment_ids, instructions: instructions, enhance_prompt: enhance_prompt }
+      request(:post, "/live/outfits", body)["outfit"]
+    end
+
     # Start a live session for one end user. Holds the first credit.
-    #   garment_id     - a prepared garment to start with.
+    #   garment_id     - a prepared garment (or outfit) to start with.
     #   max_seconds    - cap this session, 10..maxSeconds.
     #   end_user_id    - your id for the end user: one stream per end user, a
     #                    restart ends their previous one.
