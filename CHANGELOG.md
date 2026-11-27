@@ -6,6 +6,19 @@ All notable changes to the `tryiton` gem are documented here. The format is base
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-11-27
+
+### Added
+
+- `prepare_live_garment` takes optional overrides: `detail_images:` (up to 3 extra views that sharpen the
+  description), `description:` (your item description, used in the generated prompt), `instructions:` (your own
+  prompt, used verbatim) and `enhance_prompt:` (`false` keeps the prompt as-is; default `true`).
+- `prepare_live_outfit(garment_ids:, instructions: nil, enhance_prompt: nil)` (`POST /live/outfits`): combine 2 or 3
+  prepared garments into one outfit, returned in the garment shape. Its `"id"` works wherever a garment id does.
+- Garment hashes gain `"prompt"`, `"enhancePrompt"` and `"items"` (an outfit's garment ids top to bottom, `nil` for a
+  single garment); `"category"` can now also be `"outfit"`. The `live_garment` RBS record and the method signatures
+  are updated to match.
+
 ### Deprecated
 
 - The `mode:` and `moderation_level:` keys of `try_on_fashion`: the API ignores `mode` and validates `moderation_level` without applying it. Removed in 3.0.
@@ -66,7 +79,8 @@ All notable changes to the `tryiton` gem are documented here. The format is base
 - Initial release: clothes, hairstyle and tattoo try-on, `get_status`, `wait_for_result`, `get_credits` and
   `Tryiton::Error`.
 
-[Unreleased]: https://github.com/tryiton-now/tryiton-ruby/compare/v2.1.0...HEAD
+[Unreleased]: https://github.com/tryiton-now/tryiton-ruby/compare/v2.2.0...HEAD
+[2.2.0]: https://github.com/tryiton-now/tryiton-ruby/compare/v2.1.0...v2.2.0
 [2.1.0]: https://github.com/tryiton-now/tryiton-ruby/compare/v2.0.0...v2.1.0
 [2.0.0]: https://github.com/tryiton-now/tryiton-ruby/compare/v1.1.0...v2.0.0
 [1.1.0]: https://github.com/tryiton-now/tryiton-ruby/compare/v1.0.0...v1.1.0
